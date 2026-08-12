@@ -34,7 +34,13 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 		return
 	}
 
+	multiAgentV2Enabled := service.CodexMultiAgentV2Enabled(h.cfg, c)
 	ifNoneMatch := c.GetHeader("If-None-Match")
+	if multiAgentV2Enabled {
+		// The cached ETag describes the unaugmented manifest. Bypass revalidation
+		// while augmenting the response so an old client cache cannot miss v2.
+		ifNoneMatch = ""
+	}
 	// 固定账号分支：开启后只用选定账号拉取 manifest，不经过调度器；
 	// 全部不可用/全部失败时按 FallbackToScheduler 决定回退调度器或返回错误。
 	if apiKey.Group.Platform == service.PlatformOpenAI &&
@@ -86,6 +92,9 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 			return
 		}
 		if configured {
+			if multiAgentV2Enabled {
+				augmentCodexModelsManifestForMultiAgentV2(configuredManifest)
+			}
 			writeOpenAIModelsResponse(c, configuredManifest)
 			return
 		}
@@ -146,8 +155,25 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 		if c.Request.Context().Err() != nil {
 			return
 		}
+		if multiAgentV2Enabled {
+			augmentCodexModelsManifestForMultiAgentV2(manifest)
+		}
 
 		writeOpenAIModelsResponse(c, manifest)
 		return
+	}
+}
+
+// augmentCodexModelsManifestForMultiAgentV2 advertises multi-agent v2 on a
+// manifest that is about to be written back to a Codex client.
+func augmentCodexModelsManifestForMultiAgentV2(manifest *service.OpenAIModelsResponse) {
+	if manifest == nil || manifest.NotModified {
+		return
+	}
+	var changed bool
+	manifest.Body, changed = service.AugmentCodexModelsManifestForMultiAgentV2(manifest.Body)
+	if changed {
+		// Do not advertise the upstream ETag for a locally modified body.
+		manifest.ETag = ""
 	}
 }

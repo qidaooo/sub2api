@@ -276,6 +276,9 @@ gateway:
   # 默认 false：保持纯文本 Codex 请求不被改写；客户端显式提供 image_generation tool 时，
   # 仍会在分组允许图片生成的情况下正常转发。
   codex_image_generation_bridge_enabled: false
+  # Enable the Responses API multi-agent v2 compatibility layer for official Codex clients.
+  # 为官方 Codex 客户端启用 multi-agent v2 兼容层；默认关闭，避免改写其他 Responses 客户端。
+  codex_multi_agent_v2_enabled: false
   # Optional: template file used to build the final top-level Codex `instructions`.
   # 可选：用于构建最终 Codex 顶层 `instructions` 的模板文件路径。
   #

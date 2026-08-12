@@ -245,15 +245,20 @@ func openAIResponsesNamespaceNames(c *gin.Context) map[string]apicompat.Response
 
 func restoreOpenAIResponsesNamespacePayload(c *gin.Context, payload []byte) ([]byte, error) {
 	names := openAIResponsesNamespaceNames(c)
-	if len(names) == 0 || !json.Valid(payload) {
+	if !json.Valid(payload) {
 		return payload, nil
 	}
-	restored, changed, err := apicompat.RestoreResponsesNamespaceCalls(payload, names)
-	if err != nil {
-		return payload, err
+	restored := payload
+	if len(names) > 0 {
+		var err error
+		restored, _, err = apicompat.RestoreResponsesNamespaceCalls(payload, names)
+		if err != nil {
+			return payload, err
+		}
 	}
-	if changed {
+	if restored, err := restoreCodexMultiAgentV2Response(c, restored); err != nil {
+		return payload, err
+	} else {
 		return restored, nil
 	}
-	return payload, nil
 }
