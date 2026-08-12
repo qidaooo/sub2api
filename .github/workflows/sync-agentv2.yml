@@ -1,0 +1,75 @@
+name: Sync latest upstream release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agentv2-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: agentv2
+          fetch-depth: 0
+
+      - name: Resolve latest upstream release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh api repos/Wei-Shaw/sub2api/releases/latest --jq '.tag_name')"
+          case "$tag" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Unexpected upstream release tag: $tag" >&2; exit 1 ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Rebase agentv2 patch stack
+        env:
+          LATEST_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Wei-Shaw/sub2api.git
+          git fetch upstream --tags --force
+
+          current_tag="$(tr -d '\r\n' < UPSTREAM_RELEASE)"
+          if [ "$current_tag" = "$LATEST_TAG" ]; then
+            echo "agentv2 is already based on $LATEST_TAG"
+            exit 0
+          fi
+          git show-ref --verify --quiet "refs/tags/$current_tag" || {
+            echo "Missing current base tag: $current_tag" >&2
+            exit 1
+          }
+          git show-ref --verify --quiet "refs/tags/$LATEST_TAG" || {
+            echo "Missing latest upstream tag: $LATEST_TAG" >&2
+            exit 1
+          }
+
+          if ! git rebase --onto "$LATEST_TAG" "$current_tag" agentv2; then
+            git rebase --abort || true
+            echo "agentv2 patch stack conflicts with $LATEST_TAG; manual resolution required" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$LATEST_TAG" > UPSTREAM_RELEASE
+          git add UPSTREAM_RELEASE
+          if git diff --cached --quiet; then
+            echo "Rebase completed without marker changes"
+          else
+            git commit -m "chore: sync upstream release $LATEST_TAG [skip ci]"
+          fi
+          git push origin HEAD:agentv2 --force-with-lease
