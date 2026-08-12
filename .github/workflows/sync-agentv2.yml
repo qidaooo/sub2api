@@ -43,7 +43,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
-          git fetch upstream --tags --force
+          git fetch upstream main --tags --force
+
+          # Keep the fork's mirror branch current without mixing production patches into it.
+          git push origin upstream/main:main --force-with-lease
 
           current_tag="$(tr -d '\r\n' < UPSTREAM_RELEASE)"
           if [ "$current_tag" = "$LATEST_TAG" ]; then
