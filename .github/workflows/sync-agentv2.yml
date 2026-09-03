@@ -46,7 +46,10 @@ jobs:
           git fetch upstream main --tags --force
 
           # Keep the fork's mirror branch current without mixing production patches into it.
-          git push origin upstream/main:main --force-with-lease
+          # GITHUB_TOKEN cannot create or update .github/workflows/*, so upstream workflow
+          # changes make this push fail; the mirror is cosmetic, never block the rebase on it.
+          git push origin upstream/main:main --force-with-lease \
+            || echo "warning: mirror branch 'main' not updated (workflow files need a PAT with workflow scope)"
 
           current_tag="$(tr -d '\r\n' < UPSTREAM_RELEASE)"
           if [ "$current_tag" = "$LATEST_TAG" ]; then
